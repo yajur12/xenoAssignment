@@ -21,6 +21,14 @@ export default (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: false,
     },
+    billingName: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    billingEmail: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
   }, {
     tableName: 'orders',
     timestamps: true,

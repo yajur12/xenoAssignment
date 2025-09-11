@@ -28,16 +28,12 @@ export async function syncShopifyData(tenantId) {
     // Save customers to DB with tenantId
 
     for (const c of customers) {
-      if (!c.email) {
-        console.warn(`[ShopifySync] Skipping customer ${c.id} (no email)`);
-        continue;
-      }
-      const name = [c.first_name, c.last_name].filter(Boolean).join(' ') || c.email;
+      const name = [c.first_name, c.last_name].filter(Boolean).join(' ') || c.email || `Customer ${c.id}`;
       console.log(`[ShopifySync] Saving customer:`, c.id, c.email);
       await Customer.upsert({
         id: c.id,
         name,
-        email: c.email,
+        email: c.email || null,
         tenantId,
       });
     }
@@ -52,6 +48,8 @@ export async function syncShopifyData(tenantId) {
         amount: parseFloat(o.total_price),
         customerId: o.customer?.id,
         tenantId,
+        billingName: o.billing_address?.name || o.customer?.first_name + ' ' + o.customer?.last_name || null,
+        billingEmail: o.email || o.customer?.email || null,
       });
     }
 

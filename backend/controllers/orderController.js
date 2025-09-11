@@ -28,8 +28,8 @@ export const getAllOrders = async (req, res) => {
 export const createOrder = async (req, res) => {
   try {
     const tenantId = req.user.tenantId;
-    const { orderDate, amount, customerId } = req.body;
-    const order = await Order.create({ orderDate, amount, customerId, tenantId });
+    const { orderDate, amount, customerId, billingName, billingEmail } = req.body;
+    const order = await Order.create({ orderDate, amount, customerId, tenantId, billingName, billingEmail });
     res.status(201).json(order);
   } catch (err) {
     res.status(500).json({ message: err.message });
