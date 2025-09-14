@@ -10,7 +10,6 @@ import TopCustomersList from '@/components/dashboard/TopCustomersList'
 import CustomerList from '@/components/dashboard/CustomerList'
 import TabbedCharts from '@/components/dashboard/TabbedCharts'
 import { 
-  TrendingUp, 
   ShoppingCart, 
   Users, 
   DollarSign,
@@ -57,7 +56,12 @@ export default function Dashboard() {
     date.setDate(date.getDate() - 30)
     return date
   })
-  const [endDate, setEndDate] = useState(new Date())
+  const [endDate, setEndDate] = useState(() => {
+    const date = new Date()
+    // Extend end date to include future dates to catch webhook data
+    date.setDate(date.getDate() + 30)
+    return date
+  })
 
   // Redirect if not authenticated (temporarily disabled for testing)
   useEffect(() => {
@@ -83,9 +87,18 @@ export default function Dashboard() {
       })
       
       const [kpisResponse, customersResponse, chartResponse] = await Promise.all([
-        fetch('/api/insights/kpis', { cache: 'no-store' }),
-        fetch('/api/insights/top-customers', { cache: 'no-store' }),
-        fetch(`/api/insights/orders-over-time?startDate=${startDate.toISOString()}&endDate=${endDate.toISOString()}`, { cache: 'no-store' })
+        fetch('/api/insights/kpis', { 
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' }
+        }),
+        fetch('/api/insights/top-customers', { 
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' }
+        }),
+        fetch(`/api/insights/orders-over-time?startDate=${startDate.toISOString()}&endDate=${endDate.toISOString()}`, { 
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' }
+        })
       ])
 
       console.log('Response statuses:', {
@@ -127,7 +140,7 @@ export default function Dashboard() {
     } finally {
       setIsLoading(false)
     }
-  }, [user, startDate, endDate])
+  }, [startDate, endDate])
 
   // Manual sync function
   const syncData = useCallback(async () => {
@@ -163,7 +176,7 @@ export default function Dashboard() {
     } finally {
       setIsSyncing(false)
     }
-  }, [user, fetchData])
+  }, [fetchData])
 
   // Initial data fetch
   useEffect(() => {
@@ -181,16 +194,83 @@ export default function Dashboard() {
     }
   }, [startDate, endDate, loading, fetchData])
 
-  // Auto-refresh data every 30 seconds
+  // Webhook-based refresh system using Server-Sent Events
   useEffect(() => {
-    const interval = setInterval(() => {
-      // For testing, always auto-refresh
-      if (!isSyncing) {
-        fetchData()
-      }
-    }, 30000)
+    // Create a more intelligent refresh system
+    let refreshTimeout: NodeJS.Timeout | null = null
+    let eventSource: EventSource | null = null
     
-    return () => clearInterval(interval)
+    const scheduleRefresh = () => {
+      // Clear any existing timeout
+      if (refreshTimeout) {
+        clearTimeout(refreshTimeout)
+      }
+      
+      // Schedule a refresh in 2 seconds (debounced)
+      refreshTimeout = setTimeout(() => {
+        if (!isSyncing) {
+          console.log('Webhook-triggered dashboard refresh...')
+          fetchData()
+        }
+      }, 2000)
+    }
+    
+    // Set up Server-Sent Events connection for real-time webhook notifications
+    const setupSSE = () => {
+      try {
+        eventSource = new EventSource('/api/refresh-dashboard')
+        
+        eventSource.onopen = () => {
+          console.log('Connected to webhook notifications via SSE')
+        }
+        
+        eventSource.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data)
+            
+            if (data.type === 'refresh') {
+              console.log('Webhook refresh event received:', data.event)
+              scheduleRefresh()
+            } else if (data.type === 'connected') {
+              console.log('SSE connection established:', data.message)
+            } else if (data.type === 'heartbeat') {
+              // Heartbeat received, connection is alive
+              console.log('SSE heartbeat received')
+            }
+          } catch (error) {
+            console.error('Error parsing SSE message:', error)
+          }
+        }
+        
+        eventSource.onerror = (error) => {
+          console.error('SSE connection error:', error)
+          
+          // Attempt to reconnect after 5 seconds
+          setTimeout(() => {
+            if (eventSource?.readyState === EventSource.CLOSED) {
+              console.log('Attempting to reconnect SSE...')
+              setupSSE()
+            }
+          }, 5000)
+        }
+        
+      } catch (error) {
+        console.error('Error setting up SSE connection:', error)
+      }
+    }
+    
+    // Initialize SSE connection
+    setupSSE()
+    
+    return () => {
+      if (refreshTimeout) {
+        clearTimeout(refreshTimeout)
+      }
+      if (eventSource) {
+        eventSource.close()
+        console.log('SSE connection closed')
+      }
+    }
   }, [isSyncing, fetchData])
 
   if (loading) {

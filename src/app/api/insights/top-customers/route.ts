@@ -1,18 +1,27 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { shopifyService } from '@/lib/shopify'
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const supabaseAdmin = getSupabaseAdmin()
     if (!supabaseAdmin) {
       throw new Error('Admin client not available')
     }
 
-    // First try to get data from Supabase
+    // Get system user ID for filtering webhook data
+    const { data: systemUser } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('email', 'system@shopify-insights.local')
+      .single()
+
+    const systemUserId = (systemUser as any)?.id
+
+    // First try to get data from Supabase filtered by system user
     const { data: topCustomers, error: dbError } = await supabaseAdmin
       .from('shopify_customers')
       .select('first_name, last_name, email, total_spent, orders_count')
+      .eq('user_id', systemUserId)
       .order('total_spent', { ascending: false })
       .limit(5)
 
@@ -65,10 +74,22 @@ export async function GET(request: NextRequest) {
         }
       ]
       
-      return NextResponse.json(demoCustomers)
+      return NextResponse.json(demoCustomers, {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      })
     }
 
-    return NextResponse.json(topCustomers || [])
+    return NextResponse.json(topCustomers || [], {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
+    })
 
   } catch (error: any) {
     console.error('Error fetching top customers:', error)
