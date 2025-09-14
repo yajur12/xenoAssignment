@@ -275,6 +275,7 @@ The application is configured for Vercel deployment with:
 - **API Timeouts**: 30 seconds for most routes, 60 seconds for data ingestion
 - **CORS Headers**: Enabled for all API routes
 - **Framework Detection**: Automatic Next.js detection
+- **Deployment Line**:https://xeno-assignment-six.vercel.app/
 
 ### Database Schema
 
